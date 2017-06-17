@@ -1,0 +1,108 @@
+---
+title: "07-17-2017"
+author: Brian Thorsen
+output: github_document
+---
+
+Exploring the `PhViD` package for pharmacovigilance (PV), and giving this notebook setup a trial run.
+
+
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(PhViD)
+```
+
+Conveniently, `PhViD` includes a simulated sample dataset: `PhViDdata.frame`.
+
+```{r}
+data(PhViDdata.frame)
+head(PhViDdata.frame)
+```
+
+The columns contain drug and adverse event (AE) IDs, and the number of reports of said AE-drug reports. While this is the most important component of the data for PV studies, it appears that none of the other possible occurrences can be accurately obtained without further information.
+
+- (1) One could get a rough estimate of people reporting a given AE while not on a given drug by summing the `n11` column for all other drug IDs. This will not take into consideration people who are coprescribed that drug with others.
+
+- (2) People who don't experience a given AE while taking a given drug cannot be determined by this table. This is an issue in general for spontaneous reporting databases (SDRs), but typically one can obtain an extent of this info by having all the data at the per-patient resolution (where all drug and all AE information for an individual is known), but this ignores the people not registered in the SDR.
+
+- (3) People who don't experience a given AE while not on a given drug can be estimated, but not accurately determined for similar reasons as (1).
+
+The marginal counts, however, can be obtained; i.e. the number of people on a given drug and the number people experiencing a given AE.
+
+
+With those reservations, let's try out the methods of the package.
+
+```{r}
+## Conversion needed for further methods
+pv_df <- as.PhViD(PhViDdata.frame)
+
+## Examine contents
+head(pv_df$data)
+head(pv_df$L)
+pv_df$N
+```
+
+The `data` contains the event-drug pair and marginal count data, while the two other items contain the metadata (label-pairs and number of reports, respectively). Let's see if this object is what I think it is, by recreating it via `tidyverse` methods.
+
+### Recreating the data
+
+```{r}
+pv_tbl <- as.tbl(PhViDdata.frame)
+colnames(pv_tbl) <- c("drug", "ae", "n11")
+pv_tbl$drug <- as.character(pv_tbl$drug)
+pv_tbl$ae <- as.character(pv_tbl$ae)
+
+## Marginal sum of all reports of drug being used
+pv_n1. <- pv_tbl %>% 
+  group_by(drug) %>%
+  summarise(n1. = sum(n11))
+
+## Sum of all reports of AE
+pv_n.1 <- pv_tbl %>% 
+  group_by(ae) %>%
+  summarise(n.1 = sum(n11))
+
+## Append marginal counts to original data
+pv_tbl %>% 
+  merge(pv_n1., by.x = "drug", by.y = "drug") %>% 
+  merge(pv_n.1, by.x = "ae", by.y = "ae") ->
+  tidy_pv_margin
+
+## Attempted recreation of data
+head(tidy_pv_margin)
+```
+
+Looks reasonable. One user-error here might be switching the meaning of `n.1` and `n1.`, but this will be easy to identify later.
+
+```{r}
+## Convert to tibble for comparison purposes
+phvid_margin <- pv_df$data %>% as.data.frame %>% as.tbl
+
+## Naively assuming the labels are indexed the same,
+## add the drug/AE labels to marginal counts
+phvid_margin$drug <- pv_df$L[["Drug lab"]] %>% as.character
+phvid_margin$ae <- pv_df$L[["AE lab"]] %>% as.character
+
+print(c(nrow(tidy_pv_margin), nrow(phvid_margin)))
+```
+
+At least the number of observations are the same. The real question is whether or not the observed counts are the same.
+
+```{r}
+phvid_margin %>% 
+  merge(tidy_pv_margin, by.x = c("ae", "drug"), by.y = c("ae", "drug")) %>%
+  head(n = 15)
+```
+
+A cursory scan of the data suggests that the comparison was a success! Drug/AE counts and marginal counts are as expected, and match between the `PhViD` generated object and the personally-created tibble.
+
+
+References/readings: 
+
+- https://cran.r-project.org/web/packages/PhViD/PhViD.pdf
+
+```{r}
+sessionInfo()
+```
