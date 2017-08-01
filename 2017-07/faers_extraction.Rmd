@@ -1,0 +1,93 @@
+---
+title: "FDA FAERS Data Extraction"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(XML)
+library(tidyverse)
+```
+
+# Note:
+
+This file was the start of an attempt to create an easily reproducible means of accessing the FAERS database; thus potentially allowing a full PV analysis environment within R. This attempt was quickly abandoned due to improper HTML structure on the FDA website. Even if the HTML structure is fixed on a later date, a persistent issue with this implementation will be the size and uncleaned nature of the quarterly files.
+
+### Accessing the data
+
+The data for all FAERS per quarter per year is publicly available at https://www.fda.gov/Drugs/GuidanceComplianceRegulatoryInformation/Surveillance/AdverseDrugEffects/ucm083765.htm. To download these files, a web-crawler function has been written which reads the HTML content of this page to identify all links for a specified window of time.
+
+```{r}
+get_faers_urls <- function(url='https://www.fda.gov/Drugs/GuidanceComplianceRegulatoryInformation/Surveillance/AdverseDrugEffects/ucm083765.htm',
+                           start_period, end_period, data_type='ASCII') {
+  ## Crawls the HTML content of the FDA FAERS download page
+  ## to extract URLs for downloading the requested data.
+  ##
+  ## Arguments:
+  ## url:          URL to parse for data. Default is current page as of June 2017.
+  ## start_period: a vector of year and quarter info to specify the first included data.
+  ##               e.g.: c(2005, 1) <==> Jan. - March 2005
+  ## end_period:   same as start_period, but for the last included data.
+  ## data_type:    character; specify either 'ASCII' or 'SGML'.
+  
+  
+  ## Check arguments
+  if(!(data_type == 'ASCII' | data_type == 'SGML')) {
+    stop('Data type must be either ASCII or SGML')
+  }
+  if(start_period[2] > 4 | start_period[2] < 1) {
+    stop('Invalid quarter specification for start period')
+  }
+  if(end_period[2] > 4 | end_period[2] < 1) {
+    stop('Invalid quarter specification for end period')
+  }
+  if(start_period[1] < 2004 | start_period[1] > 2011) {
+    stop('Invalid start year: must be between 2004 - 2011')
+  }
+  if(end_period[1] < 2004 | end_period[1] > 2011) {
+    stop('Invalid end year: must be between 2004 - 2011')
+  }
+  
+  ## Create character strings for each quarter data
+  year_sequence <- expand.grid(qtr = c(1:4), 
+                               yr = seq(start_period[1], end_period[1])) %>% as.tbl
+  
+  selected_window <- year_sequence %>% filter(
+    (yr > start_period[1] | qtr >= start_period[2]) &
+    (yr < end_period[1] | qtr <= end_period[2]))
+  
+  selected_window_strings <- selected_window %>% 
+    transmute(strings = 
+    paste(as.character(yr), 'q', as.character(qtr), sep = '')) %>%
+    .$strings
+
+  ## Locate HTML content
+  html_content <- htmlParse(url)
+  
+  
+}
+```
+
+```{r}
+html_content <- htmlParse(file = 'https://www.fda.gov/Drugs/GuidanceComplianceRegulatoryInformation/Surveillance/AdverseDrugEffects/ucm082193.htm')
+
+## Unfortunately, stop point is here for now, because website HTML content is not being parsed correctly
+
+## Could manually create list of download URLs but this would not be an efficient use of time
+```
+
+```{r}
+html_content %>%
+  xmlRoot %>% getNodeSet('//BODY')
+```
+
+
+
+
+```{r}
+sessionInfo()
+```
+
